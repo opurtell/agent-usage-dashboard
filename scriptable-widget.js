@@ -1,9 +1,9 @@
 // AI Usage Widget — Scriptable (iOS)
-// 2×4 landscape widget showing session + weekly usage per provider
+// Compact medium widget (4×2) showing session + weekly usage per provider
 //
 // Install: https://apps.apple.com/app/scriptable/id1405459188
 // 1. Open Scriptable, create new script, paste this
-// 2. Add a Scriptable widget (2×4) to home screen, pick this script
+// 2. Add a Scriptable medium widget to home screen, pick this script
 // 3. Set widget parameter to your API key
 
 const API_BASE = "https://a1-instance.tail61c8f0.ts.net";
@@ -17,19 +17,21 @@ if (!API_KEY) {
 }
 
 // ── Colours ──
-const BG = new Color("#1a1a2e", 1);
-const CARD_BG = new Color("#16213e", 1);
-const TEXT = new Color("#e0e0e0", 1);
-const MUTED = new Color("#777", 1);
-const BAR_BG = new Color("#2a2a3e", 1);
-const CLAUDE = new Color("#d97757", 1);
-const OPENAI = new Color("#10a37f", 1);
-const ZAI = new Color("#7c5cfc", 1);
+const BG = "#1a1a2e";
+const CARD_BG = "#16213e";
+const TEXT_COL = "#e0e0e0";
+const MUTED_COL = "#777";
+const BAR_BG_COL = "#2a2a3e";
+const CLAUDE_COL = "#d97757";
+const OPENAI_COL = "#10a37f";
+const ZAI_COL = "#7c5cfc";
+const DANGER_COL = "#ef4444";
+const WARN_COL = "#f59e0b";
 
 const PROVIDERS = [
-  { id: "claude", label: "Claude", color: CLAUDE },
-  { id: "zai",    label: "Z.ai",   color: ZAI },
-  { id: "codex",  label: "Codex",  color: OPENAI },
+  { id: "claude", label: "Claude", color: CLAUDE_COL },
+  { id: "zai",    label: "Z.ai",   color: ZAI_COL },
+  { id: "codex",  label: "Codex",  color: OPENAI_COL },
 ];
 
 // ── Fetch ──
@@ -39,17 +41,15 @@ try {
   req.timeoutInterval = 15;
   data = await req.loadJSON();
 } catch (e) {
-  const w = new ListWidget();
-  w.backgroundColor = BG;
-  w.addText("Fetch error").textColor = new Color("#ef4444", 1);
-  Script.setWidget(w);
-  Script.complete();
+  showErr("Fetch error");
 }
+if (!data?.ok) showErr(data?.error || "Error");
 
-if (!data?.ok) {
+function showErr(msg) {
   const w = new ListWidget();
-  w.backgroundColor = BG;
-  w.addText(data?.error || "Error").textColor = new Color("#ef4444", 1);
+  w.backgroundColor = new Color(BG, 1);
+  const t = w.addText(msg);
+  t.textColor = new Color(DANGER_COL, 1);
   Script.setWidget(w);
   Script.complete();
 }
@@ -63,97 +63,89 @@ function pickPeriod(periods, type) {
     || null;
 }
 
-function pctColor(pct) {
-  if (pct >= 90) return new Color("#ef4444", 1);
-  if (pct >= 70) return new Color("#f59e0b", 1);
-  return TEXT;
+function pctColorHex(pct) {
+  if (pct >= 90) return DANGER_COL;
+  if (pct >= 70) return WARN_COL;
+  return TEXT_COL;
 }
 
-function resetTimeLeft(resetsAt) {
+function resetShort(resetsAt) {
   if (!resetsAt) return "";
   const diff = new Date(resetsAt) - Date.now();
   if (diff <= 0) return "";
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
-  if (h > 0) return `${h}h ${m}m`;
+  if (h >= 24) return `${Math.floor(h/24)}d`;
+  if (h > 0) return `${h}h`;
   return `${m}m`;
 }
 
-function addBar(stack, pct, color, height) {
-  const barOuter = stack.addStack();
-  barOuter.layoutHorizontally();
-  barOuter.cornerRadius = 3;
-  barOuter.size = new Size(0, height);
-  barOuter.backgroundColor = BAR_BG;
-
-  const fill = barOuter.addStack();
-  fill.backgroundColor = color;
-  fill.cornerRadius = 3;
-  const fillPct = Math.min(pct, 100);
-  // Use layoutConstraints doesn't exist, so we use a spacer trick
-  barOuter.setPadding(0, 0, 0, 0);
-  fill.setPadding(0, 0, 0, 0);
-
-  // We need to use addSpacer for relative sizing
-  // Scriptable doesn't support % width directly, so we draw manually
-  return { barOuter, fill };
+// Draw a progress bar image
+function makeBarImg(width, height, pct, colorHex) {
+  const dc = new DrawContext();
+  dc.size = new Size(width, height);
+  dc.opaque = false;
+  dc.setFillColor(new Color(BAR_BG_COL, 1));
+  const bgRect = new Rect(0, 0, width, height);
+  dc.fillRoundedRect(bgRect, 2);
+  dc.setFillColor(new Color(colorHex, 1));
+  const fillW = Math.max((pct / 100) * width, 0);
+  const fillRect = new Rect(0, 0, fillW, height);
+  dc.fillRoundedRect(fillRect, 2);
+  return dc.getImage();
 }
 
 // ── Build widget ──
 const widget = new ListWidget();
-widget.backgroundColor = BG;
-widget.setPadding(10, 14, 10, 14);
+widget.backgroundColor = new Color(BG, 1);
+widget.setPadding(10, 12, 10, 12);
 
-// Use the full height with a vertical stack
-const mainStack = widget.addStack();
-mainStack.layoutVertically();
-mainStack.size = new Size(0, 0);
+// Use medium widget dimensions
+const W = 364;
+const BAR_H = 5;
+const BAR_W = W - 24; // minus padding
 
-// Title row
-const titleRow = mainStack.addStack();
+// Title
+const titleRow = widget.addStack();
 titleRow.layoutHorizontally();
 titleRow.centerAlignContent();
 const title = titleRow.addText("🤖 AI Usage");
-title.font = Font.boldSystemFont(14);
-title.textColor = TEXT;
+title.font = Font.boldSystemFont(13);
+title.textColor = new Color(TEXT_COL, 1);
 titleRow.addSpacer();
 if (data.age_seconds != null) {
-  const age = titleRow.addText(`${data.age_seconds}s ago`);
+  const age = titleRow.addText(`${data.age_seconds}s`);
   age.font = Font.systemFont(9);
-  age.textColor = MUTED;
+  age.textColor = new Color(MUTED_COL, 1);
 }
 
-mainStack.addSpacer(8);
+widget.addSpacer(6);
 
-// ── Provider cards ──
-for (const prov of PROVIDERS) {
+// ── Provider rows ──
+for (let i = 0; i < PROVIDERS.length; i++) {
+  const prov = PROVIDERS[i];
   const p = providers[prov.id];
 
-  const card = mainStack.addStack();
-  card.layoutVertically();
-  card.backgroundColor = CARD_BG;
-  card.cornerRadius = 8;
-  card.setPadding(8, 10, 8, 10);
+  // Header line
+  const row = widget.addStack();
+  row.layoutHorizontally();
+  row.centerAlignContent();
 
-  // Provider header
-  const header = card.addStack();
-  header.layoutHorizontally();
-  header.centerAlignContent();
-
-  const dot = header.addText("● ");
-  dot.font = Font.systemFont(12);
-  dot.textColor = prov.color;
-  const name = header.addText(prov.label);
-  name.font = Font.boldSystemFont(12);
-  name.textColor = TEXT;
+  // Dot + Name
+  const dot = row.addText("● ");
+  dot.font = Font.systemFont(11);
+  dot.textColor = new Color(prov.color, 1);
+  const name = row.addText(prov.label);
+  name.font = Font.boldSystemFont(11);
+  name.textColor = new Color(TEXT_COL, 1);
+  name.textOpacity = p ? 1 : 0.4;
 
   if (!p) {
-    header.addSpacer();
-    const na = header.addText("Not configured");
-    na.font = Font.systemFont(10);
-    na.textColor = MUTED;
-    mainStack.addSpacer(6);
+    row.addSpacer();
+    const na = row.addText("—");
+    na.font = Font.systemFont(9);
+    na.textColor = new Color(MUTED_COL, 1);
+    if (i < PROVIDERS.length - 1) widget.addSpacer(8);
     continue;
   }
 
@@ -164,58 +156,60 @@ for (const prov of PROVIDERS) {
     weekly = periods.find(pp => (pp.name || "").toLowerCase() === "quota");
   }
 
-  header.addSpacer();
+  row.addSpacer(8);
 
-  // Session % on right of header
+  // Session
   if (sess) {
-    const sLabel = header.addText("Ses ");
-    sLabel.font = Font.systemFont(9);
-    sLabel.textColor = MUTED;
-    const sVal = header.addText(`${sess.utilization}%`);
-    sVal.font = Font.boldSystemFont(12);
-    sVal.textColor = pctColor(sess.utilization);
-    const rt = resetTimeLeft(sess.resets_at);
-    if (rt) {
-      const st = header.addText(` ${rt}`);
-      st.font = Font.systemFont(8);
-      st.textColor = MUTED;
+    const sLab = row.addText("Ses");
+    sLab.font = Font.systemFont(8);
+    sLab.textColor = new Color(MUTED_COL, 1);
+    const sVal = row.addText(` ${sess.utilization}%`);
+    sVal.font = Font.boldSystemFont(10);
+    sVal.textColor = new Color(pctColorHex(sess.utilization), 1);
+    const rs = resetShort(sess.resets_at);
+    if (rs) {
+      const rt = row.addText(` ${rs}`);
+      rt.font = Font.systemFont(8);
+      rt.textColor = new Color(MUTED_COL, 1);
     }
   }
 
-  card.addSpacer(4);
+  // Spacer between session & weekly
+  row.addSpacer(8);
 
-  // Session bar
-  if (sess) {
-    addBar(card, sess.utilization, prov.color, 5);
-  }
-
-  card.addSpacer(6);
-
-  // Weekly row
+  // Weekly
   if (weekly) {
-    const wRow = card.addStack();
-    wRow.layoutHorizontally();
-    wRow.centerAlignContent();
-
-    const wLabel = wRow.addText("Weekly ");
-    wLabel.font = Font.systemFont(9);
-    wLabel.textColor = MUTED;
-    const wVal = wRow.addText(`${weekly.utilization}%`);
-    wVal.font = Font.boldSystemFont(11);
-    wVal.textColor = pctColor(weekly.utilization);
-    wRow.addSpacer();
-    const rt = resetTimeLeft(weekly.resets_at);
-    if (rt) {
-      const wt = wRow.addText(`resets ${rt}`);
-      wt.font = Font.systemFont(8);
-      wt.textColor = MUTED;
+    const wLab = row.addText("Wk");
+    wLab.font = Font.systemFont(8);
+    wLab.textColor = new Color(MUTED_COL, 1);
+    const wVal = row.addText(` ${weekly.utilization}%`);
+    wVal.font = Font.boldSystemFont(10);
+    wVal.textColor = new Color(pctColorHex(weekly.utilization), 1);
+    const rs = resetShort(weekly.resets_at);
+    if (rs) {
+      const rt = row.addText(` ${rs}`);
+      rt.font = Font.systemFont(8);
+      rt.textColor = new Color(MUTED_COL, 1);
     }
-
-    card.addSpacer(3);
-    addBar(card, weekly.utilization, prov.color, 5);
   }
 
-  mainStack.addSpacer(6);
+  // Progress bars
+  const bars = widget.addStack();
+  bars.layoutHorizontally();
+  bars.spacing = 4;
+
+  if (sess) {
+    const barW = weekly ? Math.floor(BAR_W / 2) - 2 : BAR_W;
+    const sessImg = bars.addImage(makeBarImg(barW, BAR_H, sess.utilization, prov.color));
+    sessImg.imageSize = new Size(barW, BAR_H);
+  }
+  if (weekly) {
+    const barW = sess ? Math.floor(BAR_W / 2) - 2 : BAR_W;
+    const weekImg = bars.addImage(makeBarImg(barW, BAR_H, weekly.utilization, prov.color));
+    weekImg.imageSize = new Size(barW, BAR_H);
+  }
+
+  if (i < PROVIDERS.length - 1) widget.addSpacer(6);
 }
 
 Script.setWidget(widget);
