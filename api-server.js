@@ -98,6 +98,7 @@ const server = http.createServer(async (req, res) => {
   const origin = req.headers.origin || '';
   const allowedOrigins = [
     'https://opurtell.github.io',
+    'https://a1-instance.tail61c8f0.ts.net',
     'http://localhost:',
     'http://127.0.0.1:'
   ];
