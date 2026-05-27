@@ -3,7 +3,10 @@
 // Auth: shared secret via ?key= query param or X-API-Key header
 
 const http = require('http');
+const https = require('https');
 const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
 
 const PORT = process.env.PORT || 3199;
 const VIBEUSAGE = process.env.VIBEUSAGE_PATH || '/home/ubuntu/.local/bin/vibeusage';
@@ -62,6 +65,129 @@ function sanitizeErrors(data) {
   return data;
 }
 
+// --- Codex direct fetch (bypasses vibeusage bug) ---
+const CODEX_AUTH_PATH = path.join(process.env.HOME || '/home/ubuntu', '.codex', 'auth.json');
+const OPENAI_TOKEN_URL = 'https://auth.openai.com/oauth/token';
+const CHATGPT_USAGE_URL = 'https://chatgpt.com/backend-api/wham/usage';
+const OPENAI_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
+
+function httpsRequest(url, options, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(url, options, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        res.body = Buffer.concat(chunks).toString();
+        resolve(res);
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')); });
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function refreshCodexToken(refreshToken) {
+  const body = new URLSearchParams({
+    grant_type: 'refresh_token',
+    refresh_token: refreshToken,
+    client_id: OPENAI_CLIENT_ID,
+  }).toString();
+
+  const res = await httpsRequest(OPENAI_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  }, body);
+
+  if (res.statusCode !== 200) throw new Error(`Token refresh failed: ${res.statusCode}`);
+  return JSON.parse(res.body);
+}
+
+function readCodexCredentials() {
+  try {
+    const data = JSON.parse(fs.readFileSync(CODEX_AUTH_PATH, 'utf8'));
+    return data.tokens || null;
+  } catch { return null; }
+}
+
+function writeCodexCredentials(tokens) {
+  try {
+    const data = JSON.parse(fs.readFileSync(CODEX_AUTH_PATH, 'utf8'));
+    data.tokens = { ...data.tokens, ...tokens };
+    fs.writeFileSync(CODEX_AUTH_PATH, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error('Failed to write codex credentials:', e.message);
+  }
+}
+
+async function fetchCodexUsage() {
+  const creds = readCodexCredentials();
+  if (!creds || !creds.access_token) return null;
+
+  let accessToken = creds.access_token;
+
+  // Try refreshing the token first
+  if (creds.refresh_token) {
+    try {
+      const refreshed = await refreshCodexToken(creds.refresh_token);
+      accessToken = refreshed.access_token;
+      writeCodexCredentials({
+        access_token: refreshed.access_token,
+        refresh_token: refreshed.refresh_token,
+        id_token: refreshed.id_token || creds.id_token,
+      });
+    } catch (e) {
+      console.error('Codex token refresh failed, trying existing token:', e.message);
+    }
+  }
+
+  // Fetch usage from ChatGPT
+  const res = await httpsRequest(CHATGPT_USAGE_URL, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json',
+      'User-Agent': 'codex-cli/0.134.0',
+    },
+  });
+
+  if (res.statusCode !== 200) return null;
+  return JSON.parse(res.body);
+}
+
+function parseCodexUsage(apiResp) {
+  if (!apiResp || !apiResp.rate_limit) return null;
+  const rl = apiResp.rate_limit;
+  const periods = [];
+
+  if (rl.primary_window) {
+    periods.push({
+      name: 'Session (5h)',
+      utilization: rl.primary_window.used_percent,
+      period_type: 'session',
+      resets_at: rl.primary_window.reset_at ? new Date(rl.primary_window.reset_at * 1000).toISOString() : null,
+    });
+  }
+  if (rl.secondary_window) {
+    periods.push({
+      name: 'Weekly',
+      utilization: rl.secondary_window.used_percent,
+      period_type: 'weekly',
+      resets_at: rl.secondary_window.reset_at ? new Date(rl.secondary_window.reset_at * 1000).toISOString() : null,
+    });
+  }
+
+  return {
+    fetched_at: new Date().toISOString(),
+    periods,
+    identity: {
+      plan: apiResp.plan_type || 'unknown',
+      email: apiResp.email || null,
+    },
+    source: 'codex_direct',
+  };
+}
+
 function fetchUsage(forceFresh) {
   return new Promise((resolve, reject) => {
     const now = Date.now();
@@ -84,31 +210,45 @@ function fetchUsage(forceFresh) {
     const args = ['--json'];
     if (forceFresh) args.push('--no-cache');
 
-    execFile(VIBEUSAGE, args, { timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
-      fetching = false;
+    (async () => {
+      try {
+        const stdout = await new Promise((res, rej) => {
+          execFile(VIBEUSAGE, args, { timeout: 30000, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) return rej(err);
+            res(stdout);
+          });
+        });
 
-      if (err) {
+        const parsed = JSON.parse(stdout);
+        sanitizeErrors(parsed);
+
+        // Overlay Codex data from direct ChatGPT API (bypasses vibeusage bug)
+        try {
+          const codexApi = await fetchCodexUsage();
+          if (codexApi) {
+            const codexParsed = parseCodexUsage(codexApi);
+            if (codexParsed) {
+              if (!parsed.providers) parsed.providers = {};
+              parsed.providers.codex = codexParsed;
+            }
+          }
+        } catch (e) {
+          console.error('Codex direct fetch failed:', e.message);
+        }
+
+        cached = parsed;
+        cachedAt = Date.now();
+        resolve({ data: cached, age: 0 });
+      } catch (err) {
         console.error(`vibeusage error: ${err.message}`);
         if (cached) {
           return resolve({ data: cached, age: Math.round((Date.now() - cachedAt) / 1000), stale: true, error: err.message });
         }
-        return reject(err);
+        reject(err);
+      } finally {
+        fetching = false;
       }
-
-      try {
-        const parsed = JSON.parse(stdout);
-        sanitizeErrors(parsed);
-        cached = parsed;
-        cachedAt = Date.now();
-        resolve({ data: cached, age: 0 });
-      } catch (parseErr) {
-        console.error(`JSON parse error: ${parseErr.message}`);
-        if (cached) {
-          return resolve({ data: cached, age: Math.round((Date.now() - cachedAt) / 1000), stale: true, error: parseErr.message });
-        }
-        reject(parseErr);
-      }
-    });
+    })();
   });
 }
 
