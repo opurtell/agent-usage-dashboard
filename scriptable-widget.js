@@ -4,21 +4,14 @@
 // Install: https://apps.apple.com/app/scriptable/id1405459188
 // 1. Open Scriptable, create new script, paste this
 // 2. Add a Scriptable medium widget to home screen, pick this script
-// 3. Set widget parameter to your API key
+// 3. Set widget parameter to your API key (or leave blank to use default)
 
 const API_BASE = "https://a1-instance.tail61c8f0.ts.net";
-const API_KEY = args.widgetParameter || "";
-
-if (!API_KEY) {
-  const w = new ListWidget();
-  w.addText("Set widget param to API key");
-  Script.setWidget(w);
-  Script.complete();
-}
+const DEFAULT_KEY = "47231abd3599f55975518ea17a6f96c6";
+const API_KEY = args.widgetParameter || DEFAULT_KEY;
 
 // ── Colours ──
 const BG = "#1a1a2e";
-const CARD_BG = "#16213e";
 const TEXT_COL = "#e0e0e0";
 const MUTED_COL = "#777";
 const BAR_BG_COL = "#2a2a3e";
@@ -35,15 +28,18 @@ const PROVIDERS = [
 ];
 
 // ── Fetch ──
-let data;
+let data = null;
 try {
   const req = new Request(`${API_BASE}/api/usage?key=${encodeURIComponent(API_KEY)}`);
   req.timeoutInterval = 15;
   data = await req.loadJSON();
 } catch (e) {
-  showErr("Fetch error");
+  showErr("Network error");
 }
-if (!data?.ok) showErr(data?.error || "Error");
+
+if (!data || !data.ok) {
+  showErr((data && data.error) || "Unknown error");
+}
 
 function showErr(msg) {
   const w = new ListWidget();
@@ -52,15 +48,15 @@ function showErr(msg) {
   t.textColor = new Color(DANGER_COL, 1);
   Script.setWidget(w);
   Script.complete();
-  throw new Error(msg);
 }
 
 const providers = (data && data.data && data.data.providers) || {};
 
 // ── Helpers ──
 function pickPeriod(periods, type) {
-  return periods.find(p => p.period_type === type)
-    || periods.find(p => (p.name || "").toLowerCase().includes(type))
+  if (!periods || !periods.length) return null;
+  return periods.find(function(p) { return p.period_type === type; })
+    || periods.find(function(p) { return (p.name || "").toLowerCase().includes(type); })
     || null;
 }
 
@@ -72,50 +68,46 @@ function pctColorHex(pct) {
 
 function resetShort(resetsAt) {
   if (!resetsAt) return "";
-  const diff = new Date(resetsAt) - Date.now();
+  var diff = new Date(resetsAt).getTime() - Date.now();
   if (diff <= 0) return "";
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  if (h >= 24) return `${Math.floor(h/24)}d`;
-  if (h > 0) return `${h}h`;
-  return `${m}m`;
+  var h = Math.floor(diff / 3600000);
+  var m = Math.floor((diff % 3600000) / 60000);
+  if (h >= 24) return Math.floor(h / 24) + "d";
+  if (h > 0) return h + "h";
+  return m + "m";
 }
 
 // Draw a progress bar image
 function makeBarImg(width, height, pct, colorHex) {
-  const dc = new DrawContext();
+  var dc = new DrawContext();
   dc.size = new Size(width, height);
   dc.opaque = false;
   dc.setFillColor(new Color(BAR_BG_COL, 1));
-  const bgRect = new Rect(0, 0, width, height);
-  dc.fillRoundedRect(bgRect, 2);
+  dc.fillRoundedRect(new Rect(0, 0, width, height), 2);
   dc.setFillColor(new Color(colorHex, 1));
-  const fillW = Math.max((pct / 100) * width, 0);
-  const fillRect = new Rect(0, 0, fillW, height);
-  dc.fillRoundedRect(fillRect, 2);
+  var fillW = Math.max((pct / 100) * width, 0);
+  dc.fillRoundedRect(new Rect(0, 0, fillW, height), 2);
   return dc.getImage();
 }
 
 // ── Build widget ──
-const widget = new ListWidget();
+var widget = new ListWidget();
 widget.backgroundColor = new Color(BG, 1);
 widget.setPadding(10, 12, 10, 12);
 
-// Use medium widget dimensions
-const W = 364;
-const BAR_H = 5;
-const BAR_W = W - 24; // minus padding
+var BAR_H = 5;
+var BAR_W = 340; // medium widget width minus padding
 
 // Title
-const titleRow = widget.addStack();
+var titleRow = widget.addStack();
 titleRow.layoutHorizontally();
 titleRow.centerAlignContent();
-const title = titleRow.addText("🤖 AI Usage");
+var title = titleRow.addText("🤖 AI Usage");
 title.font = Font.boldSystemFont(13);
 title.textColor = new Color(TEXT_COL, 1);
 titleRow.addSpacer();
 if (data.age_seconds != null) {
-  const age = titleRow.addText(`${data.age_seconds}s`);
+  var age = titleRow.addText(data.age_seconds + "s");
   age.font = Font.systemFont(9);
   age.textColor = new Color(MUTED_COL, 1);
 }
@@ -123,91 +115,89 @@ if (data.age_seconds != null) {
 widget.addSpacer(6);
 
 // ── Provider rows ──
-for (let i = 0; i < PROVIDERS.length; i++) {
-  const prov = PROVIDERS[i];
-  const p = providers[prov.id];
+for (var i = 0; i < PROVIDERS.length; i++) {
+  var prov = PROVIDERS[i];
+  var p = providers[prov.id] || null;
 
   // Header line
-  const row = widget.addStack();
+  var row = widget.addStack();
   row.layoutHorizontally();
   row.centerAlignContent();
 
   // Dot + Name
-  const dot = row.addText("● ");
+  var dot = row.addText("● ");
   dot.font = Font.systemFont(11);
   dot.textColor = new Color(prov.color, 1);
-  const name = row.addText(prov.label);
-  name.font = Font.boldSystemFont(11);
-  name.textColor = new Color(TEXT_COL, 1);
-  name.textOpacity = p ? 1 : 0.4;
+  var nameText = row.addText(prov.label);
+  nameText.font = Font.boldSystemFont(11);
+  nameText.textColor = new Color(TEXT_COL, 1);
 
   if (!p) {
     row.addSpacer();
-    const na = row.addText("—");
+    var na = row.addText("—");
     na.font = Font.systemFont(9);
     na.textColor = new Color(MUTED_COL, 1);
-    if (i < PROVIDERS.length - 1) widget.addSpacer(8);
+    if (i < PROVIDERS.length - 1) widget.addSpacer(6);
     continue;
   }
 
-  const periods = (p.periods || []).filter(pp => pp.utilization != null);
-  const sess = pickPeriod(periods, "session");
-  let weekly = pickPeriod(periods, "weekly");
+  var periods = (p.periods || []).filter(function(pp) { return pp.utilization != null; });
+  var sess = pickPeriod(periods, "session");
+  var weekly = pickPeriod(periods, "weekly");
   if (!weekly && prov.id === "zai") {
-    weekly = periods.find(pp => (pp.name || "").toLowerCase() === "quota");
+    weekly = periods.find(function(pp) { return (pp.name || "").toLowerCase() === "quota"; }) || null;
   }
 
   row.addSpacer(8);
 
   // Session
   if (sess) {
-    const sLab = row.addText("Ses");
+    var sLab = row.addText("Ses");
     sLab.font = Font.systemFont(8);
     sLab.textColor = new Color(MUTED_COL, 1);
-    const sVal = row.addText(` ${sess.utilization}%`);
+    var sVal = row.addText(" " + sess.utilization + "%");
     sVal.font = Font.boldSystemFont(10);
     sVal.textColor = new Color(pctColorHex(sess.utilization), 1);
-    const rs = resetShort(sess.resets_at);
-    if (rs) {
-      const rt = row.addText(` ${rs}`);
-      rt.font = Font.systemFont(8);
-      rt.textColor = new Color(MUTED_COL, 1);
+    var srs = resetShort(sess.resets_at);
+    if (srs) {
+      var srt = row.addText(" " + srs);
+      srt.font = Font.systemFont(8);
+      srt.textColor = new Color(MUTED_COL, 1);
     }
   }
 
-  // Spacer between session & weekly
   row.addSpacer(8);
 
   // Weekly
   if (weekly) {
-    const wLab = row.addText("Wk");
+    var wLab = row.addText("Wk");
     wLab.font = Font.systemFont(8);
     wLab.textColor = new Color(MUTED_COL, 1);
-    const wVal = row.addText(` ${weekly.utilization}%`);
+    var wVal = row.addText(" " + weekly.utilization + "%");
     wVal.font = Font.boldSystemFont(10);
     wVal.textColor = new Color(pctColorHex(weekly.utilization), 1);
-    const rs = resetShort(weekly.resets_at);
-    if (rs) {
-      const rt = row.addText(` ${rs}`);
-      rt.font = Font.systemFont(8);
-      rt.textColor = new Color(MUTED_COL, 1);
+    var wrs = resetShort(weekly.resets_at);
+    if (wrs) {
+      var wrt = row.addText(" " + wrs);
+      wrt.font = Font.systemFont(8);
+      wrt.textColor = new Color(MUTED_COL, 1);
     }
   }
 
   // Progress bars
-  const bars = widget.addStack();
+  var bars = widget.addStack();
   bars.layoutHorizontally();
   bars.spacing = 4;
 
   if (sess) {
-    const barW = weekly ? Math.floor(BAR_W / 2) - 2 : BAR_W;
-    const sessImg = bars.addImage(makeBarImg(barW, BAR_H, sess.utilization, prov.color));
-    sessImg.imageSize = new Size(barW, BAR_H);
+    var sessBarW = weekly ? Math.floor(BAR_W / 2) - 2 : BAR_W;
+    var sessImg = bars.addImage(makeBarImg(sessBarW, BAR_H, sess.utilization, prov.color));
+    sessImg.imageSize = new Size(sessBarW, BAR_H);
   }
   if (weekly) {
-    const barW = sess ? Math.floor(BAR_W / 2) - 2 : BAR_W;
-    const weekImg = bars.addImage(makeBarImg(barW, BAR_H, weekly.utilization, prov.color));
-    weekImg.imageSize = new Size(barW, BAR_H);
+    var weekBarW = sess ? Math.floor(BAR_W / 2) - 2 : BAR_W;
+    var weekImg = bars.addImage(makeBarImg(weekBarW, BAR_H, weekly.utilization, prov.color));
+    weekImg.imageSize = new Size(weekBarW, BAR_H);
   }
 
   if (i < PROVIDERS.length - 1) widget.addSpacer(6);
