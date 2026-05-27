@@ -148,56 +148,63 @@ for (var i = 0; i < PROVIDERS.length; i++) {
     weekly = periods.find(function(pp) { return (pp.name || "").toLowerCase() === "quota"; }) || null;
   }
 
-  row.addSpacer(8);
+  // Two aligned columns: session (left) + weekly (right)
+  var colRow = widget.addStack();
+  colRow.layoutHorizontally();
+  colRow.spacing = 4;
 
-  // Session
+  var halfW = Math.floor(BAR_W / 2) - 2;
+
+  // Session column
+  var sessCol = colRow.addStack();
+  sessCol.layoutVertically();
+  sessCol.size = new Size(halfW, 0);
+
   if (sess) {
-    var sLab = row.addText("Ses");
+    var sessLabelRow = sessCol.addStack();
+    sessLabelRow.layoutHorizontally();
+    sessLabelRow.centerAlignContent();
+    var sLab = sessLabelRow.addText("Ses");
     sLab.font = Font.systemFont(8);
     sLab.textColor = new Color(MUTED_COL, 1);
-    var sVal = row.addText(" " + sess.utilization + "%");
+    var sVal = sessLabelRow.addText(" " + sess.utilization + "%");
     sVal.font = Font.boldSystemFont(10);
     sVal.textColor = new Color(pctColorHex(sess.utilization), 1);
     var srs = resetShort(sess.resets_at);
     if (srs) {
-      var srt = row.addText(" " + srs);
+      var srt = sessLabelRow.addText(" " + srs);
       srt.font = Font.systemFont(8);
       srt.textColor = new Color(MUTED_COL, 1);
     }
+    sessCol.addSpacer(2);
+    var sessImg = sessCol.addImage(makeBarImg(halfW, BAR_H, sess.utilization, prov.color));
+    sessImg.imageSize = new Size(halfW, BAR_H);
   }
 
-  row.addSpacer(8);
+  // Weekly column
+  var weekCol = colRow.addStack();
+  weekCol.layoutVertically();
+  weekCol.size = new Size(halfW, 0);
 
-  // Weekly
   if (weekly) {
-    var wLab = row.addText("Wk");
+    var weekLabelRow = weekCol.addStack();
+    weekLabelRow.layoutHorizontally();
+    weekLabelRow.centerAlignContent();
+    var wLab = weekLabelRow.addText("Wk");
     wLab.font = Font.systemFont(8);
     wLab.textColor = new Color(MUTED_COL, 1);
-    var wVal = row.addText(" " + weekly.utilization + "%");
+    var wVal = weekLabelRow.addText(" " + weekly.utilization + "%");
     wVal.font = Font.boldSystemFont(10);
     wVal.textColor = new Color(pctColorHex(weekly.utilization), 1);
     var wrs = resetShort(weekly.resets_at);
     if (wrs) {
-      var wrt = row.addText(" " + wrs);
+      var wrt = weekLabelRow.addText(" " + wrs);
       wrt.font = Font.systemFont(8);
       wrt.textColor = new Color(MUTED_COL, 1);
     }
-  }
-
-  // Progress bars
-  var bars = widget.addStack();
-  bars.layoutHorizontally();
-  bars.spacing = 4;
-
-  if (sess) {
-    var sessBarW = weekly ? Math.floor(BAR_W / 2) - 2 : BAR_W;
-    var sessImg = bars.addImage(makeBarImg(sessBarW, BAR_H, sess.utilization, prov.color));
-    sessImg.imageSize = new Size(sessBarW, BAR_H);
-  }
-  if (weekly) {
-    var weekBarW = sess ? Math.floor(BAR_W / 2) - 2 : BAR_W;
-    var weekImg = bars.addImage(makeBarImg(weekBarW, BAR_H, weekly.utilization, prov.color));
-    weekImg.imageSize = new Size(weekBarW, BAR_H);
+    weekCol.addSpacer(2);
+    var weekImg = weekCol.addImage(makeBarImg(halfW, BAR_H, weekly.utilization, prov.color));
+    weekImg.imageSize = new Size(halfW, BAR_H);
   }
 
   if (i < PROVIDERS.length - 1) widget.addSpacer(6);
