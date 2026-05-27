@@ -433,10 +433,9 @@
             }
 
             const periods = provider.periods || [];
-            const tier = (provider.identity && provider.identity.plan)
-                || (provider.identity && provider.identity.tier)
-                || (provider.identity && provider.identity.subscription)
-                || '';
+            const tier = (provider.identity && provider.identity.plan && provider.identity.plan !== 'default_claude_ai')
+                ? provider.identity.plan
+                : '';
 
             // Filter out 0/100 trivial periods
             const visiblePeriods = periods.filter(p => p.utilization !== undefined && p.utilization !== null);
@@ -496,15 +495,8 @@
         function render(data) {
             const resp = data.data || data;
 
-            // Handle vibeusage JSON structure
-            // vibeusage --json outputs: { providers: [ { id, name, tier, periods: [...] } ] }
-            const providerList = resp.providers || [];
-
-            // Build a map by id
-            const providerMap = {};
-            for (const p of providerList) {
-                providerMap[p.id] = p;
-            }
+            // vibeusage --json outputs: { providers: { claude: {...}, zai: {...} }, errors: {...} }
+            const providerMap = resp.providers || {};
 
             // Update status line
             document.getElementById('statusLine').innerHTML = renderStatusLine(providerMap);
