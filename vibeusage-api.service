@@ -8,6 +8,9 @@ ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/tmp/ai-usage-dashboard/
 WorkingDirectory=/home/ubuntu/.openclaw/workspace/tmp/ai-usage-dashboard
 Environment=PORT=3199
 Environment=PATH=/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Generate a random key: openssl rand -hex 16
+# Then set it here or use an EnvironmentFile
+EnvironmentFile=/home/ubuntu/.config/vibeusage-api.env
 Restart=on-failure
 RestartSec=5
 

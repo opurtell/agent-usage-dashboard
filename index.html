@@ -365,22 +365,24 @@
     </div>
 
     <script>
-        // Configure your VPS API endpoint here:
-        // For GH Pages deployment, this should be your VPS public URL
-        const API_URL = window.__API_URL__ || '';
+        // Config is read from URL hash: #api=https://your-url&key=your-secret
+        // Hash never sent to server, never appears in logs/referrers
 
-        function getApiUrl() {
-            // Check URL params, then config, then relative
-            const params = new URLSearchParams(window.location.search);
-            return params.get('api') || API_URL || '';
+        function getConfig() {
+            const hash = window.location.hash.slice(1); // remove #
+            const params = new URLSearchParams(hash);
+            return {
+                apiUrl: params.get('api') || '',
+                apiKey: params.get('key') || ''
+            };
         }
 
         async function fetchUsage(forceFresh = false) {
-            const base = getApiUrl();
-            if (!base) {
-                throw new Error('API URL not configured. Add ?api=http://your-vps:3199 to the URL.');
+            const { apiUrl, apiKey } = getConfig();
+            if (!apiUrl) {
+                throw new Error('API not configured. Add to URL hash: #api=https://your-url&key=your-secret');
             }
-            const url = `${base}/api/usage${forceFresh ? '?fresh=1' : ''}`;
+            const url = `${apiUrl}/api/usage${forceFresh ? '?fresh=1' : ''}${apiKey ? (forceFresh ? '&' : '?') + 'key=' + encodeURIComponent(apiKey) : ''}`;
             const res = await fetch(url);
             if (!res.ok) throw new Error(`API returned ${res.status}`);
             return await res.json();

@@ -57,19 +57,28 @@ The API listens on `127.0.0.1:3199`. To make it accessible from GH Pages, either
 - **Caddy/nginx reverse proxy** with a domain + TLS
 - **SSH tunnel** from your local machine
 
-### 5. Configure the dashboard
+### 5. Set the API key
 
-Open the dashboard with the API URL as a query param:
+```bash
+# Generate a random shared secret
+openssl rand -hex 16
+
+# Store it (never committed to the repo)
+mkdir -p ~/.config
+echo 'VIBEUSAGE_API_KEY=your-generated-key-here' > ~/.config/vibeusage-api.env
+```
+
+This key is never in the repo. It goes in the URL **hash** (after `#`) which browsers don't send to servers or include in referrers.
+
+### 6. Open the dashboard
 
 ```
-https://opurtell.github.io/agent-usage-dashboard/?api=https://your-vps-url
+https://opurtell.github.io/agent-usage-dashboard/#api=https://your-vps-url&key=your-secret
 ```
 
-Or edit `index.html` and set `window.__API_URL__` in a build step.
+### 7. (Optional) GitHub Actions snapshots
 
-### 6. (Optional) GitHub Actions snapshots
-
-Add `ZAI_API_KEY` as a repository secret. The workflow runs twice daily and commits a snapshot to `data/usage.json` as a fallback when the VPS API is unreachable.
+Add `ZAI_API_KEY` as a repository secret (for the snapshot workflow only). The workflow runs twice daily and commits a fallback snapshot to `data/usage.json`.
 
 ## API Endpoints
 
@@ -93,3 +102,5 @@ Add `ZAI_API_KEY` as a repository secret. The workflow runs twice daily and comm
 - `?fresh=1` bypasses both caches for instant refresh
 - Claude and Codex use **OAuth tokens** (not API keys) — consumer plan usage isn't available through the Anthropic/OpenAI APIs
 - The dashboard is a single `index.html` file with zero build step
+- No secrets are ever stored in the repo — API key lives in `~/.config/vibeusage-api.env` on the VPS only
+- Dashboard URL hash (`#api=...&key=...`) is never sent to any server, never appears in logs or referrers
