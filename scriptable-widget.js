@@ -93,22 +93,22 @@ function makeBarImg(width, height, pct, colorHex) {
 // ── Build widget ──
 var widget = new ListWidget();
 widget.backgroundColor = new Color(BG, 1);
-widget.setPadding(10, 12, 10, 12);
+widget.setPadding(8, 14, 8, 14);
 
-var BAR_H = 5;
-var BAR_W = 340; // medium widget width minus padding
+var BAR_H = 4;
+var BAR_W = 320; // medium widget width minus padding
 
 // Title
 var titleRow = widget.addStack();
 titleRow.layoutHorizontally();
 titleRow.centerAlignContent();
 var title = titleRow.addText("🤖 AI Usage");
-title.font = Font.boldSystemFont(13);
+title.font = Font.boldSystemFont(11);
 title.textColor = new Color(TEXT_COL, 1);
 titleRow.addSpacer();
 if (data.age_seconds != null) {
   var age = titleRow.addText(data.age_seconds + "s");
-  age.font = Font.systemFont(9);
+  age.font = Font.systemFont(8);
   age.textColor = new Color(MUTED_COL, 1);
 }
 
@@ -126,10 +126,10 @@ for (var i = 0; i < PROVIDERS.length; i++) {
 
   // Dot + Name
   var dot = row.addText("● ");
-  dot.font = Font.systemFont(11);
+  dot.font = Font.systemFont(10);
   dot.textColor = new Color(prov.color, 1);
   var nameText = row.addText(prov.label);
-  nameText.font = Font.boldSystemFont(11);
+  nameText.font = Font.boldSystemFont(10);
   nameText.textColor = new Color(TEXT_COL, 1);
 
   if (!p) {
@@ -151,7 +151,7 @@ for (var i = 0; i < PROVIDERS.length; i++) {
   // Two aligned columns: session (left) + weekly (right)
   var colRow = widget.addStack();
   colRow.layoutHorizontally();
-  colRow.spacing = 4;
+  colRow.spacing = 8;
 
   var halfW = Math.floor(BAR_W / 2) - 2;
 
@@ -165,15 +165,15 @@ for (var i = 0; i < PROVIDERS.length; i++) {
     sessLabelRow.layoutHorizontally();
     sessLabelRow.centerAlignContent();
     var sLab = sessLabelRow.addText("Ses");
-    sLab.font = Font.systemFont(8);
+    sLab.font = Font.systemFont(7);
     sLab.textColor = new Color(MUTED_COL, 1);
     var sVal = sessLabelRow.addText(" " + sess.utilization + "%");
-    sVal.font = Font.boldSystemFont(10);
+    sVal.font = Font.boldSystemFont(9);
     sVal.textColor = new Color(pctColorHex(sess.utilization), 1);
     var srs = resetShort(sess.resets_at);
     if (srs) {
       var srt = sessLabelRow.addText(" " + srs);
-      srt.font = Font.systemFont(8);
+      srt.font = Font.systemFont(7);
       srt.textColor = new Color(MUTED_COL, 1);
     }
     sessCol.addSpacer(2);
@@ -191,15 +191,15 @@ for (var i = 0; i < PROVIDERS.length; i++) {
     weekLabelRow.layoutHorizontally();
     weekLabelRow.centerAlignContent();
     var wLab = weekLabelRow.addText("Wk");
-    wLab.font = Font.systemFont(8);
+    wLab.font = Font.systemFont(7);
     wLab.textColor = new Color(MUTED_COL, 1);
     var wVal = weekLabelRow.addText(" " + weekly.utilization + "%");
-    wVal.font = Font.boldSystemFont(10);
+    wVal.font = Font.boldSystemFont(9);
     wVal.textColor = new Color(pctColorHex(weekly.utilization), 1);
     var wrs = resetShort(weekly.resets_at);
     if (wrs) {
       var wrt = weekLabelRow.addText(" " + wrs);
-      wrt.font = Font.systemFont(8);
+      wrt.font = Font.systemFont(7);
       wrt.textColor = new Color(MUTED_COL, 1);
     }
     weekCol.addSpacer(2);
