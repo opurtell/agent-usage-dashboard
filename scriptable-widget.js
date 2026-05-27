@@ -52,9 +52,10 @@ function showErr(msg) {
   t.textColor = new Color(DANGER_COL, 1);
   Script.setWidget(w);
   Script.complete();
+  throw new Error(msg);
 }
 
-const providers = data.data?.providers || {};
+const providers = (data && data.data && data.data.providers) || {};
 
 // ── Helpers ──
 function pickPeriod(periods, type) {
