@@ -485,8 +485,13 @@
                     html += `<div class="status-provider"><span class="status-dot unconfigured"></span><span style="color:var(--text-muted)">${info.name}</span></div>`;
                     continue;
                 }
-                const mainPeriod = (p.periods || [])[0];
-                const pct = mainPeriod ? `${mainPeriod.utilization || 0}%` : '—';
+                // Pick the 5h session period for the summary line
+                const periods = p.periods || [];
+                const sessionPeriod = periods.find(pp =>
+                    (pp.period_type === 'session') ||
+                    (pp.name && pp.name.toLowerCase().includes('session'))
+                ) || periods[0];
+                const pct = sessionPeriod ? `${sessionPeriod.utilization || 0}%` : '—';
                 html += `<div class="status-provider"><span class="status-dot ${info.css}"></span><span><strong>${info.name}</strong> ${pct}</span></div>`;
             }
             return html;
