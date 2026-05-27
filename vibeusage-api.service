@@ -1,0 +1,15 @@
+[Unit]
+Description=VibeUsage API Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /home/ubuntu/.openclaw/workspace/tmp/ai-usage-dashboard/api-server.js
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/tmp/ai-usage-dashboard
+Environment=PORT=3199
+Environment=PATH=/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -1,10 +1,9 @@
-name: Fetch AI Usage Data
+name: Fetch AI Usage Data (Snapshot)
 
 on:
   schedule:
-    # Run every 6 hours
-    - cron: '0 */6 * * *'
-  workflow_dispatch: # Manual trigger
+    - cron: '0 */12 * * *' # Twice daily snapshot
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -15,18 +14,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch AI Usage Data
+      - name: Install vibeusage
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/joshuadavidthomas/vibeusage/main/install.sh | sh
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Fetch usage
         env:
           ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
-          OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
-          ANTHROPIC_ADMIN_KEY: ${{ secrets.ANTHROPIC_ADMIN_KEY }}
         run: |
-          node scripts/fetch-usage.js
+          mkdir -p data
+          vibeusage --json --no-cache > data/usage.json 2>/dev/null || echo '{}' > data/usage.json
+          # Add timestamp
+          node -e "
+            const fs = require('fs');
+            const d = JSON.parse(fs.readFileSync('data/usage.json','utf8'));
+            d.fetched_at = new Date().toISOString();
+            fs.writeFileSync('data/usage.json', JSON.stringify(d, null, 2));
+          "
 
       - name: Commit data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/usage.json
-          git diff --cached --quiet || git commit -m "Update usage data $(date -u +%Y-%m-%dT%H:%M)"
+          git diff --cached --quiet || git commit -m "Usage snapshot $(date -u +%Y-%m-%dT%H:%M)"
           git push
