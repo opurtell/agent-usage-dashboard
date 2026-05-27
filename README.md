@@ -96,6 +96,32 @@ Add `ZAI_API_KEY` as a repository secret (for the snapshot workflow only). The w
 | Codex/ChatGPT | Codex CLI OAuth (`~/.codex/auth.json`) or bearer token | Session + weekly usage % |
 | Z.ai | API key (`z.ai/manage-apikey`) | Token quota, MCP usage, model breakdown |
 
+## iOS Widget (Scriptable)
+
+A compact home screen widget showing session + weekly usage for each provider. Built for [Scriptable](https://apps.apple.com/app/scriptable/id1405459188) — no App Store submission needed.
+
+### Install
+
+1. Install **Scriptable** from the App Store
+2. Create a new script, paste the contents of `scriptable-widget.js`
+3. Add a **Scriptable medium widget** (4×2) to your home screen
+4. Select the script — the API key is embedded as a default, no widget parameter needed
+
+### What it shows
+
+Per provider (Claude, Z.ai, Codex):
+- **Session** usage % with time until reset
+- **Weekly** usage % with time until reset
+- Colour-coded progress bars (orange → yellow → red as usage climbs)
+
+### How it connects
+
+The widget fetches from the same Tailscale Funnel URL used by the dashboard (`https://a1-instance.tail61c8f0.ts.net/api/usage`). The API key is hardcoded as a fallback in the script so the widget works without any parameter configuration.
+
+### Sizing
+
+Optimised for **iPhone 16 Pro** medium widget (~364×170 pts). Fonts and bars are sized to fill the space with comfortable edge and column padding.
+
 ## Notes
 
 - vibeusage has its own 60-second cache; the API server adds another 45s
@@ -104,3 +130,4 @@ Add `ZAI_API_KEY` as a repository secret (for the snapshot workflow only). The w
 - The dashboard is a single `index.html` file with zero build step
 - No secrets are ever stored in the repo — API key lives in `~/.config/vibeusage-api.env` on the VPS only
 - Dashboard URL hash (`#api=...&key=...`) is never sent to any server, never appears in logs or referrers
+- Z.ai "Quota" period is labelled "monthly" by vibeusage but resets weekly — the dashboard and widget both relabel it to "Weekly Quota"
