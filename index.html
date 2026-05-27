@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Usage Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d27;
+            --border: #2a2d3a;
+            --text: #e1e4ed;
+            --text-muted: #8b8fa3;
+            --accent-zai: #7c5cfc;
+            --accent-openai: #10a37f;
+            --accent-anthropic: #d4a574;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .last-updated {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Provider summary cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .provider-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .provider-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+        }
+
+        .provider-card.zai::before { background: var(--accent-zai); }
+        .provider-card.openai::before { background: var(--accent-openai); }
+        .provider-card.anthropic::before { background: var(--accent-anthropic); }
+
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .provider-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .provider-plan {
+            font-size: 0.8rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            color: var(--text-muted);
+        }
+
+        .quota-section { margin-bottom: 1rem; }
+
+        .quota-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .quota-label span:first-child { color: var(--text-muted); }
+
+        .quota-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .quota-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        .quota-fill.zai { background: var(--accent-zai); }
+        .quota-fill.openai { background: var(--accent-openai); }
+        .quota-fill.anthropic { background: var(--accent-anthropic); }
+        .quota-fill.warning { background: var(--warning); }
+        .quota-fill.danger { background: var(--danger); }
+
+        .stat-row {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .stat {
+            flex: 1;
+        }
+
+        .stat-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.15rem;
+        }
+
+        .reset-timer {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 0.75rem;
+        }
+
+        /* Charts */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .chart-card h3 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+        }
+
+        .chart-card canvas {
+            width: 100% !important;
+            height: 280px !important;
+        }
+
+        /* Full-width chart */
+        .chart-card.full {
+            grid-column: 1 / -1;
+        }
+
+        .chart-card.full canvas {
+            height: 320px !important;
+        }
+
+        /* No data state */
+        .no-data {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        /* Error banner */
+        .error-banner {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.85rem;
+            color: #fca5a5;
+            display: none;
+        }
+
+        .error-banner.visible { display: block; }
+
+        /* Cost summary */
+        .cost-summary {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .cost-summary h3 {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .cost-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
+        .cost-item {
+            text-align: center;
+        }
+
+        .cost-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .cost-value.zai { color: var(--accent-zai); }
+        .cost-value.openai { color: var(--accent-openai); }
+        .cost-value.anthropic { color: var(--accent-anthropic); }
+
+        .cost-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 1rem; }
+            .summary-grid { grid-template-columns: 1fr; }
+            .chart-grid { grid-template-columns: 1fr; }
+            .stat-row { flex-wrap: wrap; }
+        }
+
+        /* Loading skeleton */
+        .skeleton {
+            background: linear-gradient(90deg, var(--card) 25%, rgba(255,255,255,0.05) 50%, var(--card) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+            border-radius: 4px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 AI Usage Dashboard</h1>
+            <span class="last-updated" id="lastUpdated">Loading...</span>
+        </header>
+
+        <div class="error-banner" id="errorBanner"></div>
+
+        <!-- Provider Summary Cards -->
+        <div class="summary-grid">
+            <!-- Z.ai Card -->
+            <div class="provider-card zai">
+                <div class="provider-header">
+                    <span class="provider-name">Z.ai (GLM Coding Plan)</span>
+                    <span class="provider-plan" id="zaiPlan">—</span>
+                </div>
+                <div class="quota-section">
+                    <div class="quota-label">
+                        <span>5-Hour Token Quota</span>
+                        <span id="zaiQuotaText">—</span>
+                    </div>
+                    <div class="quota-bar">
+                        <div class="quota-fill zai" id="zaiQuotaFill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="quota-section">
+                    <div class="quota-label">
+                        <span>Monthly MCP Usage</span>
+                        <span id="zaiMcpText">—</span>
+                    </div>
+                    <div class="quota-bar">
+                        <div class="quota-fill zai" id="zaiMcpFill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat">
+                        <div class="stat-value" id="zaiTokens7d">—</div>
+                        <div class="stat-label">Tokens (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="zaiCalls7d">—</div>
+                        <div class="stat-label">Calls (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="zaiTokens30d">—</div>
+                        <div class="stat-label">Tokens (30d)</div>
+                    </div>
+                </div>
+                <div class="reset-timer" id="zaiReset"></div>
+            </div>
+
+            <!-- OpenAI Card -->
+            <div class="provider-card openai">
+                <div class="provider-header">
+                    <span class="provider-name">OpenAI (ChatGPT Plus)</span>
+                    <span class="provider-plan">Plus Plan</span>
+                </div>
+                <div class="quota-section" id="openaiQuotaSection">
+                    <div class="quota-label">
+                        <span>Monthly Budget</span>
+                        <span id="openaiQuotaText">—</span>
+                    </div>
+                    <div class="quota-bar">
+                        <div class="quota-fill openai" id="openaiQuotaFill" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <div class="stat">
+                        <div class="stat-value" id="openaiCost7d">—</div>
+                        <div class="stat-label">Cost (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="openaiTokens7d">—</div>
+                        <div class="stat-label">Tokens (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="openaiRequests7d">—</div>
+                        <div class="stat-label">Requests (7d)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Anthropic Card -->
+            <div class="provider-card anthropic">
+                <div class="provider-header">
+                    <span class="provider-name">Claude (Anthropic)</span>
+                    <span class="provider-plan" id="anthropicPlan">—</span>
+                </div>
+                <div class="stat-row">
+                    <div class="stat">
+                        <div class="stat-value" id="anthropicCost7d">—</div>
+                        <div class="stat-label">Cost (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="anthropicTokens7d">—</div>
+                        <div class="stat-label">Tokens (7d)</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" id="anthropicRequests7d">—</div>
+                        <div class="stat-label">Requests (7d)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cost Summary -->
+        <div class="cost-summary">
+            <h3>Monthly Cost Overview</h3>
+            <div class="cost-grid">
+                <div class="cost-item">
+                    <div class="cost-value zai" id="costZai">—</div>
+                    <div class="cost-label">Z.ai (subscription)</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-value openai" id="costOpenai">—</div>
+                    <div class="cost-label">OpenAI (this month)</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-value anthropic" id="costAnthropic">—</div>
+                    <div class="cost-label">Anthropic (this month)</div>
+                </div>
+                <div class="cost-item">
+                    <div class="cost-value" id="costTotal" style="color: var(--text)">—</div>
+                    <div class="cost-label">Total</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="chart-grid">
+            <div class="chart-card">
+                <h3>Token Usage Over Time (7d)</h3>
+                <canvas id="tokenChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Requests Over Time (7d)</h3>
+                <canvas id="requestChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>Z.ai Model Distribution (7d)</h3>
+                <canvas id="zaiModelChart"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>OpenAI Cost by Model (7d)</h3>
+                <canvas id="openaiCostChart"></canvas>
+            </div>
+        </div>
+
+        <footer>
+            Data fetched via GitHub Actions · Last build: <span id="buildTime">—</span>
+        </footer>
+    </div>
+
+    <script>
+        const ZAI_COLOR = '#7c5cfc';
+        const OPENAI_COLOR = '#10a37f';
+        const ANTHROPIC_COLOR = '#d4a574';
+        const ZAI_COLOR_A = 'rgba(124, 92, 252, 0.15)';
+        const OPENAI_COLOR_A = 'rgba(16, 163, 127, 0.15)';
+        const ANTHROPIC_COLOR_A = 'rgba(212, 165, 116, 0.15)';
+
+        function formatTokens(n) {
+            if (n == null) return '—';
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function formatCost(n) {
+            if (n == null) return '—';
+            return '$' + n.toFixed(2);
+        }
+
+        function getQuotaClass(pct, base) {
+            if (pct > 90) return 'danger';
+            if (pct > 70) return 'warning';
+            return base;
+        }
+
+        async function loadData() {
+            let data;
+            try {
+                const res = await fetch('data/usage.json');
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                data = await res.json();
+            } catch (e) {
+                document.getElementById('errorBanner').textContent =
+                    'Could not load usage data. Run the GitHub Action to fetch fresh data.';
+                document.getElementById('errorBanner').classList.add('visible');
+                document.getElementById('lastUpdated').textContent = 'No data';
+                return;
+            }
+
+            const fetched = data.fetched_at ? new Date(data.fetched_at) : null;
+            document.getElementById('lastUpdated').textContent =
+                fetched ? 'Updated ' + fetched.toLocaleString() : '—';
+            document.getElementById('buildTime').textContent =
+                fetched ? fetched.toLocaleDateString() : '—';
+
+            const errors = [];
+            if (data.errors) {
+                for (const [k, v] of Object.entries(data.errors)) {
+                    errors.push(`${k}: ${v}`);
+                }
+            }
+            if (errors.length) {
+                document.getElementById('errorBanner').innerHTML =
+                    '⚠️ Some fetches failed:<br>' + errors.join('<br>');
+                document.getElementById('errorBanner').classList.add('visible');
+            }
+
+            // === Z.ai ===
+            const zai = data.zai || {};
+            if (zai.quota) {
+                const q = zai.quota;
+                const limits = q.limits || [];
+
+                // 5-hour token quota
+                const tokenLimit = limits.find(l => l.type && l.type.includes('5 Hour'));
+                if (tokenLimit) {
+                    const pct = tokenLimit.percentage || 0;
+                    document.getElementById('zaiQuotaText').textContent =
+                        `${formatTokens(tokenLimit.currentUsage)} / ${formatTokens(tokenLimit.total)} (${pct}%)`;
+                    const fill = document.getElementById('zaiQuotaFill');
+                    fill.style.width = pct + '%';
+                    fill.className = 'quota-fill ' + getQuotaClass(pct, 'zai');
+
+                    if (tokenLimit.nextResetTime) {
+                        const reset = new Date(tokenLimit.nextResetTime);
+                        const diff = Math.max(0, reset - Date.now());
+                        const hrs = Math.floor(diff / 3600000);
+                        const mins = Math.floor((diff % 3600000) / 60000);
+                        document.getElementById('zaiReset').textContent =
+                            `Resets in ${hrs}h ${mins}m`;
+                    }
+                }
+
+                // Monthly MCP usage
+                const mcpLimit = limits.find(l => l.type && l.type.includes('Month'));
+                if (mcpLimit) {
+                    const pct = mcpLimit.percentage || 0;
+                    document.getElementById('zaiMcpText').textContent =
+                        `${mcpLimit.currentUsage || 0} / ${mcpLimit.total || 0} (${pct}%)`;
+                    const fill = document.getElementById('zaiMcpFill');
+                    fill.style.width = pct + '%';
+                    fill.className = 'quota-fill ' + getQuotaClass(pct, 'zai');
+                }
+            }
+
+            document.getElementById('zaiPlan').textContent = zai.plan_tier || 'Pro';
+
+            if (zai.usage) {
+                const u = zai.usage;
+                document.getElementById('zaiTokens7d').textContent = formatTokens(u.tokens_7d);
+                document.getElementById('zaiCalls7d').textContent = formatTokens(u.calls_7d);
+                document.getElementById('zaiTokens30d').textContent = formatTokens(u.tokens_30d);
+            }
+
+            // === OpenAI ===
+            const openai = data.openai || {};
+            if (openai.usage) {
+                const u = openai.usage;
+                document.getElementById('openaiTokens7d').textContent = formatTokens(u.input_tokens_7d + u.output_tokens_7d);
+                document.getElementById('openaiRequests7d').textContent = formatTokens(u.requests_7d);
+            }
+            if (openai.costs) {
+                const c = openai.costs;
+                document.getElementById('openaiCost7d').textContent = formatCost(c.cost_7d);
+                document.getElementById('openaiQuotaText').textContent =
+                    `${formatCost(c.cost_this_month)} this month`;
+                // Approximate quota based on usage
+                const pct = c.cost_this_month ? Math.min(100, (c.cost_this_month / 120) * 100) : 0;
+                const fill = document.getElementById('openaiQuotaFill');
+                fill.style.width = pct + '%';
+                fill.className = 'quota-fill ' + getQuotaClass(pct, 'openai');
+            }
+
+            // === Anthropic ===
+            const anthropic = data.anthropic || {};
+            if (anthropic.usage) {
+                const u = anthropic.usage;
+                document.getElementById('anthropicTokens7d').textContent = formatTokens(u.input_tokens_7d + u.output_tokens_7d);
+                document.getElementById('anthropicRequests7d').textContent = formatTokens(u.requests_7d);
+            }
+            if (anthropic.costs) {
+                document.getElementById('anthropicCost7d').textContent = formatCost(anthropic.costs.cost_7d);
+            }
+
+            // === Cost Summary ===
+            const zaiMonthly = openai.costs?.cost_this_month || 0;
+            const openaiMonthly = openai.costs?.cost_this_month || 0;
+            const anthropicMonthly = anthropic.costs?.cost_this_month || 0;
+            // Z.ai is subscription-based; show plan cost if known
+            const zaiCost = zai.plan_cost || 0;
+            document.getElementById('costZai').textContent = zaiCost ? formatCost(zaiCost) : '—';
+            document.getElementById('costOpenai').textContent = formatCost(openaiMonthly);
+            document.getElementById('costAnthropic').textContent = formatCost(anthropicMonthly);
+            document.getElementById('costTotal').textContent = formatCost(zaiCost + openaiMonthly + anthropicMonthly);
+
+            // === Charts ===
+            buildCharts(data);
+        }
+
+        function buildCharts(data) {
+            const chartOpts = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: { color: '#8b8fa3', font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#8b8fa3', font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    },
+                    y: {
+                        ticks: { color: '#8b8fa3', font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.04)' }
+                    }
+                }
+            };
+
+            // Token Usage Over Time (7d)
+            const tokenData = (data.zai?.daily_tokens || []).map(d => ({
+                x: d.date, y: d.tokens
+            }));
+            const openaiTokenData = (data.openai?.daily_tokens || []).map(d => ({
+                x: d.date, y: d.input_tokens + d.output_tokens
+            }));
+
+            new Chart(document.getElementById('tokenChart'), {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Z.ai',
+                            data: tokenData,
+                            borderColor: ZAI_COLOR,
+                            backgroundColor: ZAI_COLOR_A,
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'OpenAI',
+                            data: openaiTokenData,
+                            borderColor: OPENAI_COLOR,
+                            backgroundColor: OPENAI_COLOR_A,
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    ...chartOpts,
+                    scales: {
+                        ...chartOpts.scales,
+                        x: { ...chartOpts.scales.x, type: 'category' }
+                    }
+                }
+            });
+
+            // Requests Over Time (7d)
+            const reqZai = (data.zai?.daily_tokens || []).map(d => ({ x: d.date, y: d.calls }));
+            const reqOpenai = (data.openai?.daily_tokens || []).map(d => ({ x: d.date, y: d.requests }));
+
+            new Chart(document.getElementById('requestChart'), {
+                type: 'bar',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Z.ai',
+                            data: reqZai,
+                            backgroundColor: ZAI_COLOR + '99',
+                            borderRadius: 4
+                        },
+                        {
+                            label: 'OpenAI',
+                            data: reqOpenai,
+                            backgroundColor: OPENAI_COLOR + '99',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    ...chartOpts,
+                    scales: {
+                        ...chartOpts.scales,
+                        x: { ...chartOpts.scales.x, type: 'category' }
+                    }
+                }
+            });
+
+            // Z.ai Model Distribution
+            const zaiModels = data.zai?.model_breakdown || [];
+            if (zaiModels.length) {
+                new Chart(document.getElementById('zaiModelChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: zaiModels.map(m => m.model),
+                        datasets: [{
+                            data: zaiModels.map(m => m.tokens),
+                            backgroundColor: [
+                                '#7c5cfc', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe'
+                            ],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#8b8fa3', font: { size: 11 }, padding: 12 }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // OpenAI Cost by Model
+            const openaiModels = data.openai?.cost_by_model || [];
+            if (openaiModels.length) {
+                new Chart(document.getElementById('openaiCostChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: openaiModels.map(m => m.model),
+                        datasets: [{
+                            label: 'Cost ($)',
+                            data: openaiModels.map(m => m.cost),
+                            backgroundColor: OPENAI_COLOR + '99',
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        ...chartOpts,
+                        indexAxis: 'y',
+                        plugins: {
+                            ...chartOpts.plugins,
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
