@@ -83,10 +83,10 @@ function makeBarImg(width, height, pct, colorHex) {
   dc.size = new Size(width, height);
   dc.opaque = false;
   dc.setFillColor(new Color(BAR_BG_COL, 1));
-  dc.fillRoundedRect(new Rect(0, 0, width, height), 2);
+  dc.fillRect(new Rect(0, 0, width, height));
   dc.setFillColor(new Color(colorHex, 1));
   var fillW = Math.max((pct / 100) * width, 0);
-  dc.fillRoundedRect(new Rect(0, 0, fillW, height), 2);
+  dc.fillRect(new Rect(0, 0, fillW, height));
   return dc.getImage();
 }
 
