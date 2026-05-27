@@ -442,20 +442,24 @@
 
             let periodsHtml = '';
             for (const p of visiblePeriods) {
+                // Z.ai "Quota" is actually weekly despite being labelled monthly
+                const isZaiQuota = id === 'zai' && (p.name || '').toLowerCase() === 'quota';
+                const pName = isZaiQuota ? 'Weekly Quota' : (p.name || '');
+                const pType = isZaiQuota ? 'weekly' : (p.period_type || '');
                 const usedPct = p.utilization || 0;
                 const fillClass = getFillClass(cssClass, usedPct, 50);
 
                 periodsHtml += `
                 <div class="period">
                     <div class="period-header">
-                        <span class="period-label">${p.name || p.period_type || 'Usage'}</span>
+                        <span class="period-label">${pName || pType || 'Usage'}</span>
                         <span class="period-pct">${usedPct}%</span>
                     </div>
                     <div class="period-bar">
                         <div class="period-fill ${fillClass}" style="width:${Math.min(usedPct, 100)}%"></div>
                     </div>
                     <div class="period-meta">
-                        <span>${p.period_type || ''}${p.model ? ' · ' + p.model : ''}</span>
+                        <span>${pType || ''}${p.model ? ' · ' + p.model : ''}</span>
                         <span>${formatReset(p.resets_at)}</span>
                     </div>
                 </div>`;
