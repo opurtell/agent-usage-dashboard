@@ -18,9 +18,10 @@ if (!API_KEY) {
 
 // ── Colours ──
 const BG = new Color("#1a1a2e", 1);
+const CARD_BG = new Color("#16213e", 1);
 const TEXT = new Color("#e0e0e0", 1);
-const MUTED = new Color("#666", 1);
-const BAR_BG = new Color("#333", 1);
+const MUTED = new Color("#777", 1);
+const BAR_BG = new Color("#2a2a3e", 1);
 const CLAUDE = new Color("#d97757", 1);
 const OPENAI = new Color("#10a37f", 1);
 const ZAI = new Color("#7c5cfc", 1);
@@ -57,7 +58,6 @@ const providers = data.data?.providers || {};
 
 // ── Helpers ──
 function pickPeriod(periods, type) {
-  // Match by period_type first, fall back to name contains
   return periods.find(p => p.period_type === type)
     || periods.find(p => (p.name || "").toLowerCase().includes(type))
     || null;
@@ -75,92 +75,147 @@ function resetTimeLeft(resetsAt) {
   if (diff <= 0) return "";
   const h = Math.floor(diff / 3600000);
   const m = Math.floor((diff % 3600000) / 60000);
-  if (h >= 24) return `${Math.floor(h / 24)}d`;
+  if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+function addBar(stack, pct, color, height) {
+  const barOuter = stack.addStack();
+  barOuter.layoutHorizontally();
+  barOuter.cornerRadius = 3;
+  barOuter.size = new Size(0, height);
+  barOuter.backgroundColor = BAR_BG;
+
+  const fill = barOuter.addStack();
+  fill.backgroundColor = color;
+  fill.cornerRadius = 3;
+  const fillPct = Math.min(pct, 100);
+  // Use layoutConstraints doesn't exist, so we use a spacer trick
+  barOuter.setPadding(0, 0, 0, 0);
+  fill.setPadding(0, 0, 0, 0);
+
+  // We need to use addSpacer for relative sizing
+  // Scriptable doesn't support % width directly, so we draw manually
+  return { barOuter, fill };
 }
 
 // ── Build widget ──
 const widget = new ListWidget();
 widget.backgroundColor = BG;
-widget.setPadding(8, 10, 8, 10);
+widget.setPadding(10, 14, 10, 14);
 
-// Title
-const titleRow = widget.addStack();
+// Use the full height with a vertical stack
+const mainStack = widget.addStack();
+mainStack.layoutVertically();
+mainStack.size = new Size(0, 0);
+
+// Title row
+const titleRow = mainStack.addStack();
 titleRow.layoutHorizontally();
 titleRow.centerAlignContent();
 const title = titleRow.addText("🤖 AI Usage");
-title.font = Font.boldSystemFont(12);
+title.font = Font.boldSystemFont(14);
 title.textColor = TEXT;
+titleRow.addSpacer();
+if (data.age_seconds != null) {
+  const age = titleRow.addText(`${data.age_seconds}s ago`);
+  age.font = Font.systemFont(9);
+  age.textColor = MUTED;
+}
 
-// ── Provider rows ──
+mainStack.addSpacer(8);
+
+// ── Provider cards ──
 for (const prov of PROVIDERS) {
   const p = providers[prov.id];
-  widget.addSpacer(5);
 
-  const row = widget.addStack();
-  row.layoutHorizontally();
-  row.centerAlignContent();
+  const card = mainStack.addStack();
+  card.layoutVertically();
+  card.backgroundColor = CARD_BG;
+  card.cornerRadius = 8;
+  card.setPadding(8, 10, 8, 10);
 
-  // Dot + name
-  const dot = row.addText("● ");
-  dot.font = Font.systemFont(10);
+  // Provider header
+  const header = card.addStack();
+  header.layoutHorizontally();
+  header.centerAlignContent();
+
+  const dot = header.addText("● ");
+  dot.font = Font.systemFont(12);
   dot.textColor = prov.color;
-  const name = row.addText(prov.label);
-  name.font = Font.boldSystemFont(10);
+  const name = header.addText(prov.label);
+  name.font = Font.boldSystemFont(12);
   name.textColor = TEXT;
-  row.addSpacer(6);
 
   if (!p) {
-    const na = row.addText("—");
-    na.font = Font.systemFont(9);
+    header.addSpacer();
+    const na = header.addText("Not configured");
+    na.font = Font.systemFont(10);
     na.textColor = MUTED;
+    mainStack.addSpacer(6);
     continue;
   }
 
   const periods = (p.periods || []).filter(pp => pp.utilization != null);
-
-  // Session
   const sess = pickPeriod(periods, "session");
+  let weekly = pickPeriod(periods, "weekly");
+  if (!weekly && prov.id === "zai") {
+    weekly = periods.find(pp => (pp.name || "").toLowerCase() === "quota");
+  }
+
+  header.addSpacer();
+
+  // Session % on right of header
   if (sess) {
-    const s = row.addText(`${sess.utilization}%`);
-    s.font = Font.boldSystemFont(9);
-    s.textColor = pctColor(sess.utilization);
+    const sLabel = header.addText("Ses ");
+    sLabel.font = Font.systemFont(9);
+    sLabel.textColor = MUTED;
+    const sVal = header.addText(`${sess.utilization}%`);
+    sVal.font = Font.boldSystemFont(12);
+    sVal.textColor = pctColor(sess.utilization);
     const rt = resetTimeLeft(sess.resets_at);
     if (rt) {
-      const st = row.addText(` ${rt}`);
+      const st = header.addText(` ${rt}`);
       st.font = Font.systemFont(8);
       st.textColor = MUTED;
     }
   }
 
-  // Separator
-  row.addSpacer(6);
-  const sep = row.addText("│");
-  sep.font = Font.systemFont(8);
-  sep.textColor = MUTED;
-  row.addSpacer(6);
+  card.addSpacer(4);
 
-  // Weekly/Quota
-  let weekly = pickPeriod(periods, "weekly");
-  if (!weekly && prov.id === "zai") {
-    weekly = periods.find(pp => (pp.name || "").toLowerCase() === "quota");
+  // Session bar
+  if (sess) {
+    addBar(card, sess.utilization, prov.color, 5);
   }
+
+  card.addSpacer(6);
+
+  // Weekly row
   if (weekly) {
-    const wLabel = row.addText("W:");
-    wLabel.font = Font.systemFont(8);
+    const wRow = card.addStack();
+    wRow.layoutHorizontally();
+    wRow.centerAlignContent();
+
+    const wLabel = wRow.addText("Weekly ");
+    wLabel.font = Font.systemFont(9);
     wLabel.textColor = MUTED;
-    row.addSpacer(2);
-    const w = row.addText(`${weekly.utilization}%`);
-    w.font = Font.boldSystemFont(9);
-    w.textColor = pctColor(weekly.utilization);
+    const wVal = wRow.addText(`${weekly.utilization}%`);
+    wVal.font = Font.boldSystemFont(11);
+    wVal.textColor = pctColor(weekly.utilization);
+    wRow.addSpacer();
     const rt = resetTimeLeft(weekly.resets_at);
     if (rt) {
-      const wt = row.addText(` ${rt}`);
+      const wt = wRow.addText(`resets ${rt}`);
       wt.font = Font.systemFont(8);
       wt.textColor = MUTED;
     }
+
+    card.addSpacer(3);
+    addBar(card, weekly.utilization, prov.color, 5);
   }
+
+  mainStack.addSpacer(6);
 }
 
 Script.setWidget(widget);
